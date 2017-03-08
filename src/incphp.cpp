@@ -6,21 +6,22 @@
 #include <iostream>
 #include <cmath>
 
+#include "logging.h"
+INITIALIZE_EASYLOGGINGPP
+
 int neccessaryArgument = true;
 int defaultIsFalse = false;
 
 
-TCLAP::CmdLine& carj::getCmd() {
-	static TCLAP::CmdLine cmdLine(
-		"This tool solves the pidgeon hole principle incrementally.",
-		' ', "0.1");
-	return cmdLine;
-}
+TCLAP::CmdLine cmd(
+	"This tool solves the pidgeon hole principle incrementally.",
+	' ', "0.1");
 
-TCLAP::ValueArg<unsigned> numberOfPigeons("p", "numPigeons",
-	"Number of pigeons", !neccessaryArgument, 1, "natural number", carj::getCmd());
-TCLAP::SwitchArg dimspec("d", "dimspec", "Output dimspec.",
-	carj::getCmd(), defaultIsFalse);
+carj::TCarjArg<TCLAP::ValueArg, unsigned> numberOfPigeons("p", "numPigeons",
+	"Number of pigeons", !neccessaryArgument, 1, "natural number", cmd);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> dimspec("d", "dimspec", "Output dimspec.",
+	cmd, defaultIsFalse);
 
 
 class DimSpecFixedPigeons {
@@ -121,7 +122,7 @@ public:
 };
 
 int incphp_main(int argc, const char **argv) {
-	carj::init(argc, argv);
+	carj::init(argc, argv, cmd);
 
 	if (dimspec.getValue()) {
 		DimSpecFixedPigeons dsfp(numberOfPigeons.getValue());

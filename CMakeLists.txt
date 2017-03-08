@@ -20,6 +20,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/external/include)
 
 set(SRC_FILES
+		src/carj/carj.cpp
 		src/incphp.cpp
 	)
 
