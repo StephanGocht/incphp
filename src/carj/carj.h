@@ -1,6 +1,6 @@
 #pragma once
 
-#include "logging.h"
+#include "carj/logging.h"
 
 #include "tclap/CmdLine.h"
 #include "json.hpp"
@@ -19,18 +19,24 @@ namespace carj {
 	Carj& getCarj();
 	std::vector<CarjArgBase*>& getArgs();
 
-	void init(int argc, const char **argv, TCLAP::CmdLine& cmd);
+	void init(int argc, const char **argv, TCLAP::CmdLine& cmd,
+		std::string parameterBase);
 
 	class Carj {
 	public:
 		const std::string configPath = "carj.json";
 
-		Carj(bool loadFromDefault = false) {
+		Carj() {
+		}
+
+		void init(bool loadFromDefault = false, std::string base = "") {
 			if (loadFromDefault) {
 				std::ifstream inStream(configPath);
 				if (inStream) {
 					inStream >> data;
 				}
+				json::json_pointer p(base);
+				parameter = &data[p];
 			}
 		}
 
@@ -40,6 +46,7 @@ namespace carj {
 		}
 
 		json data;
+		json* parameter;
 	};
 
 	class CarjArgBase {
@@ -74,8 +81,8 @@ namespace carj {
 		}
 
 		virtual void writeToJson() {
-			auto it = getCarj().data.find(parameter.getName());
-			if (it != getCarj().data.end()) {
+			auto it = getCarj().parameter->find(parameter.getName());
+			if (it != getCarj().parameter->end()) {
 				if (parameter.isSet()) {
 					json old = *it;
 					ValueType oldValue = old.get<ValueType>();
@@ -89,10 +96,10 @@ namespace carj {
 							<< "old setting: " << oldValue
 							<< " new setting: " << parameter.getValue();
 					}
-					getCarj().data[parameter.getName()] = parameter.getValue();
+					(*getCarj().parameter)[parameter.getName()] = parameter.getValue();
 				}
 			} else {
-				getCarj().data[parameter.getName()] = parameter.getValue();
+				(*getCarj().parameter)[parameter.getName()] = parameter.getValue();
 			}
 		}
 
@@ -102,7 +109,7 @@ namespace carj {
 			{
 				// the value is contained in the json file (as we write back
 				// parameters to the json, this is the case for parameters)
-				json a = getCarj().data.at(parameter.getName());
+				json a = getCarj().parameter->at(parameter.getName());
 				try {
 					value = a.get<ValueType>();
 				} catch (std::domain_error& e) {

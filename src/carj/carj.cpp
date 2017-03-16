@@ -1,11 +1,15 @@
 #include "carj.h"
+#include <string>
 
-TCLAP::SwitchArg useConfig("", "useConfig",
-	"Use configuration file 'carj.json'.",
-	/*default*/ false);
+#include "json.hpp"
+#include "carj/logging.h"
+
+
+INITIALIZE_EASYLOGGINGPP
+using json = nlohmann::json;
 
 carj::Carj& carj::getCarj() {
-	static carj::Carj carj(useConfig.getValue());
+	static carj::Carj carj;
 	return carj;
 }
 
@@ -26,7 +30,8 @@ void initLogger(){
 	el::Loggers::setVerboseLevel(2);
 }
 
-void carj::init(int argc, const char **argv, TCLAP::CmdLine& cmd) {
+void carj::init(int argc, const char **argv, TCLAP::CmdLine& cmd,
+	std::string parameterBase) {
 	START_EASYLOGGINGPP(argc, argv);
 	initLogger();
 
@@ -35,7 +40,23 @@ void carj::init(int argc, const char **argv, TCLAP::CmdLine& cmd) {
 		argc = 2;
 		argv = argv_help.data();
 	}
+
+	TCLAP::SwitchArg useConfig("", "useConfig",
+		"Use configuration file 'carj.json'.",
+		/*default*/ false);
+
+	TCLAP::ValueArg<std::string> jsonParameterBase("", "jsonParameterBase",
+		"Json pointer to base of parameters.",
+		/*necessary*/   false,
+		/*default*/     parameterBase,
+		/*description*/ "");
+
 	cmd.add(useConfig);
+	cmd.add(jsonParameterBase);
 	cmd.parse( argc, argv );
+
+	carj::getCarj().init(useConfig.getValue(), jsonParameterBase.getValue());
 	carj::CarjArgBase::writeAllToJson();
+
+
 }

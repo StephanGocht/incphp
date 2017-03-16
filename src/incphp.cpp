@@ -9,8 +9,7 @@
 #include "carj/ScopedTimer.h"
 #include "ipasir/ipasir_cpp.h"
 
-#include "logging.h"
-INITIALIZE_EASYLOGGINGPP
+#include "carj/logging.h"
 
 int neccessaryArgument = true;
 int defaultIsFalse = false;
@@ -130,7 +129,8 @@ public:
 	}
 
 	void solve(){
-		auto& solves = carj::getCarj().data["solves"];
+		auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
 		solves.clear();
 
 		bool solved = false;
@@ -194,7 +194,7 @@ private:
 };
 
 int incphp_main(int argc, const char **argv) {
-	carj::init(argc, argv, cmd);
+	carj::init(argc, argv, cmd, "/incphp/parameters"_json_pointer);
 
 	if (dimspec.getValue()) {
 		DimSpecFixedPigeons dsfp(numberOfPigeons.getValue());

@@ -13,9 +13,9 @@ namespace carj {
 		}
 
 		~ScopedTimer(){
-			std::chrono::milliseconds duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start);
+			auto duration = std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::high_resolution_clock::now() - start);
 			target = duration.count();
-			LOG(INFO) << duration.count() << "ms";
+			LOG(INFO) << duration.count() << "s";
 		}
 
 	private:
