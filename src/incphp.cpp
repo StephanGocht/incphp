@@ -194,7 +194,7 @@ private:
 };
 
 int incphp_main(int argc, const char **argv) {
-	carj::init(argc, argv, cmd, "/incphp/parameters"_json_pointer);
+	carj::init(argc, argv, cmd, "/incphp/parameters");
 
 	if (dimspec.getValue()) {
 		DimSpecFixedPigeons dsfp(numberOfPigeons.getValue());
