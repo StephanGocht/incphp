@@ -35,9 +35,9 @@ namespace carj {
 				if (inStream) {
 					inStream >> data;
 				}
-				json::json_pointer p(base);
-				parameter = &data[p];
 			}
+			json::json_pointer p(base);
+			parameter = &data[p];
 		}
 
 		~Carj(){
