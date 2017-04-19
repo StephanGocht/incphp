@@ -256,23 +256,67 @@ public:
 		auto& solves = carj::getCarj()
 			.data["/incphp/result/solves"_json_pointer];
 		solves.clear();
-
+		LOG(INFO) << "At most one";
 		for (unsigned makespan = 0; makespan < numPigeons; makespan++) {
 			solves.push_back({
 				{"makespan", makespan},
 				{"time", -1}
 			});
+			LOG(INFO) << "Makespan: " << makespan;
 			carj::ScopedTimer timer((*solves.rbegin())["time"]);
 
-			for (unsigned p = 0; p < numPigeons; p++) {
-				for (unsigned h = makespan; h < numPigeons - 1; h++) {
-					solver.assume(-P(sn, p, h));
+			for (unsigned h = 0; h < numPigeons - 1 - makespan; h++) {
+				for (unsigned p = 1; p < numPigeons - makespan; p++) {
+					for (unsigned j = 0; j < p; j++) {
+					//carj::ScopedTimer timer((*solves.rbegin())["time"]);
+					//LOG(INFO) << "P(" << sn - makespan << ", " << p << ", " << h << ")";
+					//LOG(INFO) << "P(" << sn - makespan << ", " << j << ", " << h << ")";
+					solver.assume(P(sn - makespan, p, h));
+					solver.assume(P(sn - makespan, j, h));
+					bool solved = (solver.solve() == ipasir::SolveResult::SAT);
+					assert(!solved);
+					}
 				}
 			}
 
-			bool solved = (solver.solve() == ipasir::SolveResult::SAT);
-			assert(!solved);
+			for (unsigned p = 1; p < numPigeons - makespan; p++) {
+				for (unsigned h = 0; h < numPigeons - 1 - makespan; h++) {
+					//carj::ScopedTimer timer((*solves.rbegin())["time"]);
+					//LOG(INFO) << "P(" << sn - makespan << ", " << p << ", " << h << ")";
+					//LOG(INFO) << "P(" << sn - makespan << ", " << j << ", " << h << ")";
+					solver.assume(-P(sn - makespan, p, h));
+				}
+				bool solved = (solver.solve() == ipasir::SolveResult::SAT);
+				assert(!solved);
+			}
 		}
+
+		// LOG(INFO) << "At Least one";
+		// for (unsigned makespan = 0; makespan < numPigeons; makespan++) {
+		// 	solves.push_back({
+		// 		{"makespan", makespan},
+		// 		{"time", -1}
+		// 	});
+		// 	LOG(INFO) << "Makespan: " << makespan;
+		// 	carj::ScopedTimer timer((*solves.rbegin())["time"]);
+
+		// 	for (unsigned p = 1; p < numPigeons - makespan; p++) {
+		// 		for (unsigned h = 0; h < numPigeons - 1 - makespan; h++) {
+		// 			//carj::ScopedTimer timer((*solves.rbegin())["time"]);
+		// 			//LOG(INFO) << "P(" << sn - makespan << ", " << p << ", " << h << ")";
+		// 			//LOG(INFO) << "P(" << sn - makespan << ", " << j << ", " << h << ")";
+		// 			solver.assume(-P(sn - makespan, p, h));
+		// 		}
+		// 		bool solved = (solver.solve() == ipasir::SolveResult::SAT);
+		// 		assert(!solved);
+		// 	}
+		// }
+
+		LOG(INFO) << "Final solve";
+		bool solved = (solver.solve() == ipasir::SolveResult::SAT);
+		assert(!solved);
+		solved = (solver.solve() == ipasir::SolveResult::SAT);
+		assert(!solved);
 	}
 
 private:
