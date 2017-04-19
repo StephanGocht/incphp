@@ -29,6 +29,9 @@ carj::TCarjArg<TCLAP::ValueArg, unsigned> startingMakeSpan("s", "startingMakeSpa
 carj::CarjArg<TCLAP::SwitchArg, bool> dimspec("d", "dimspec", "Output dimspec.",
 	cmd, defaultIsFalse);
 
+carj::CarjArg<TCLAP::SwitchArg, bool> extendedResolution("e", "extendedResolution",
+	"Encode PHP with extended resolution.", cmd, defaultIsFalse);
+
 
 class DimSpecFixedPigeons {
 private:
@@ -193,12 +196,114 @@ private:
 	ipasir::Solver solver;
 };
 
+class ExtendedResolution {
+public:
+	ExtendedResolution(unsigned _numPigeons):
+		numPigeons(_numPigeons)
+	{
+
+	}
+
+	void solve(){
+		unsigned sn = numPigeons;
+
+		// at most one pigeon in hole h
+		for (unsigned h = 0; h < numPigeons - 1; h++) {
+			for (unsigned i = 0; i < numPigeons; i++) {
+				for (unsigned j = 0; j < i; j++) {
+					addClause({
+						-P(sn, i, h),
+						-P(sn, j, h)});
+				}
+			}
+		}
+
+		// each pigeon has at least one hole
+		for (unsigned p = 0; p < numPigeons; p++) {
+			std::vector<int> clause;
+			for (unsigned h = 0; h < numPigeons - 1; h++) {
+				clause.push_back(P(sn, p, h));
+			}
+			addClause(clause);
+		}
+
+		for (unsigned n = sn; n > 2; n--) {
+			for (unsigned i = 0; i < n - 1; i++) {
+				for (unsigned j = 0; j < n - 2; j++) {
+					addClause({
+						 P(n - 1, i, j),
+						-P(n, i, j)
+					});
+					addClause({
+						 P(n - 1, i, j),
+						-P(n, i, n - 2),
+						-P(n, n - 1, j)
+					});
+					addClause({
+						-P(n - 1, i, j),
+						 P(n, i, j),
+						 P(n, i, n - 2)
+					});
+					addClause({
+						-P(n - 1, i, j),
+						 P(n, i, j),
+						 P(n, n - 1, j)
+					});
+				}
+			}
+		}
+
+		auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
+		solves.clear();
+
+		for (unsigned makespan = 0; makespan < numPigeons; makespan++) {
+			solves.push_back({
+				{"makespan", makespan},
+				{"time", -1}
+			});
+			carj::ScopedTimer timer((*solves.rbegin())["time"]);
+
+			for (unsigned p = 0; p < numPigeons; p++) {
+				for (unsigned h = makespan; h < numPigeons - 1; h++) {
+					solver.assume(-P(sn, p, h));
+				}
+			}
+
+			bool solved = (solver.solve() == ipasir::SolveResult::SAT);
+			assert(!solved);
+		}
+	}
+
+private:
+	ipasir::Solver solver;
+	unsigned numPigeons;
+
+	/**
+	 * Variable representing that pigeon p is in hole h.
+	 */
+	int P(unsigned n, unsigned p, unsigned h) {
+		return ((n * numPigeons + p) * numPigeons + h) + 1;
+	}
+
+
+	void addClause(std::vector<int> clause) {
+		for (int literal: clause) {
+			solver.add(literal);
+		}
+		solver.add(0);
+	}
+};
+
 int incphp_main(int argc, const char **argv) {
 	carj::init(argc, argv, cmd, "/incphp/parameters");
 
 	if (dimspec.getValue()) {
 		DimSpecFixedPigeons dsfp(numberOfPigeons.getValue());
 		dsfp.print();
+	} else if (extendedResolution.getValue()) {
+		ExtendedResolution er(numberOfPigeons.getValue());
+		er.solve();
 	} else {
 		IncrementalFixedPigeons ifp(numberOfPigeons.getValue());
 		ifp.solve();
