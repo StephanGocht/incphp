@@ -6,6 +6,7 @@ extern "C" {
 
 #include <string>
 #include <functional>
+#include <vector>
 
 namespace ipasir {
 enum class SolveResult {SAT = 10, UNSAT = 20, TIMEOUT = 0};
@@ -32,6 +33,14 @@ public:
 	 * arguments in API functions.
 	 */
 	virtual void add(int lit_or_zero) = 0;
+
+	/**
+	 * Perform add for every literal in clause and add(0)
+	 *
+	 * Required state: INPUT or SAT or UNSAT
+	 * State after: INPUT
+	 */
+	virtual void addClause(std::vector<int> clause);
 
 	/**
 	 * Add an assumption for the next SAT search (the next call

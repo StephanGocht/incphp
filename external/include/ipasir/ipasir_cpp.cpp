@@ -20,6 +20,13 @@ namespace ipasir {
 		ipasir_add(solver, lit_or_zero);
 	}
 
+	void Ipasir::addClause(std::vector<int> clause) {
+		for (int literal: clause) {
+			this->add(literal);
+		}
+		this->add(0);
+	}
+
 	void Solver::assume(int lit) {
 		ipasir_assume(solver, lit);
 	}

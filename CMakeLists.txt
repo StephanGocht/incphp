@@ -26,6 +26,7 @@ set(SRC_FILES
 
 set(UNIT_TEST_FILES
 		test/TestBasic.cpp
+		test/TestSatVariable.cpp
 	)
 
 add_library(ipasir_wrapper external/include/ipasir/ipasir_cpp.cpp)
