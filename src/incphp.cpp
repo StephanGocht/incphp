@@ -10,6 +10,7 @@
 #include "carj/carj.h"
 #include "carj/ScopedTimer.h"
 #include "ipasir/ipasir_cpp.h"
+#include "ipasir/printer.h"
 
 #include "carj/logging.h"
 
@@ -22,23 +23,8 @@ TCLAP::CmdLine cmd(
 	"This tool solves the pidgeon hole principle incrementally.",
 	' ', "0.1");
 
-carj::TCarjArg<TCLAP::ValueArg, unsigned> numberOfPigeons("p", "numPigeons",
-	"Number of pigeons", !neccessaryArgument, 1, "natural number", cmd);
-
 carj::TCarjArg<TCLAP::ValueArg, unsigned> startingMakeSpan("s", "startingMakeSpan",
 	"Makespan to start with.", !neccessaryArgument, 0, "natural number", cmd);
-
-carj::CarjArg<TCLAP::SwitchArg, bool> dimspec("d", "dimspec", "Output dimspec.",
-	cmd, defaultIsFalse);
-
-carj::CarjArg<TCLAP::SwitchArg, bool> extendedResolution("e", "extendedResolution",
-	"Encode PHP with extended resolution.", cmd, defaultIsFalse);
-
-carj::CarjArg<TCLAP::SwitchArg, bool> extendedResolution3("E", "extendedResolution3",
-	"Encode PHP with extended resolution in 3 SAT CNF.", cmd, defaultIsFalse);
-
-carj::CarjArg<TCLAP::SwitchArg, bool> incrementalExtendedResolution3("i", "incrementalExtendedResolution3",
-	"Encode PHP with incremental extended resolution in 3 SAT CNF.", cmd, defaultIsFalse);
 
 
 class DimSpecFixedPigeons {
@@ -489,6 +475,9 @@ public:
 		return allocator;
 	}
 
+	virtual ~VariableContainer(){
+
+	}
 protected:
 	unsigned numPigeons;
 
@@ -504,8 +493,13 @@ public:
 			numPigeons, numPigeons - 1)) {
 
 	}
+
 	virtual int pigeonInHole(unsigned pigeon, unsigned hole) {
 		return P(pigeon, hole);
+	}
+
+	virtual ~BasicVariableContainer(){
+
 	}
 
 private:
@@ -527,6 +521,10 @@ public:
 	virtual int pigeonInHole(unsigned layer, unsigned pigeon, unsigned hole) {
 		return P(layer, pigeon, hole);
 	}
+
+	virtual ~ExtendedVariableContainer(){
+
+	}
 private:
 	SatVariable<unsigned, unsigned, unsigned> P;
 };
@@ -543,6 +541,9 @@ public:
 		return H(pigeon, hole);
 	}
 
+	virtual ~VariableContainer3SAT(){
+
+	}
 private:
 	SatVariable<unsigned, unsigned> H;
 };
@@ -557,6 +558,10 @@ public:
 
 	virtual int helper(unsigned i) {
 		return helperVar(i);
+	}
+
+	virtual ~HelperVariableContainer(){
+
 	}
 
 private:
@@ -576,10 +581,25 @@ public:
 		T2(numPigeons)
 	{
 	}
+
+	virtual ~ContainerCombinator(){
+
+	}
 };
 
 class UniversalPHPEncoder {
 public:
+	UniversalPHPEncoder(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		unsigned _numPigeons):
+
+		UniversalPHPEncoder(
+			std::move(_solver),
+			std::make_unique<BasicVariableContainer>(_numPigeons),
+			_numPigeons
+		)
+	{}
+
 	UniversalPHPEncoder(
 		std::unique_ptr<ipasir::Ipasir> _solver,
 		std::unique_ptr<VariableContainer> _var,
@@ -592,8 +612,8 @@ public:
 	}
 
 	virtual void addAtMostOnePigeonInHole(unsigned hole) {
-		for (unsigned pigeonA = 0; pigeonA < numPigeons; pigeonA++) {
-			for (unsigned pigeonB = 0; pigeonB < numPigeons; pigeonB++) {
+		for (unsigned pigeonA = 1; pigeonA < numPigeons; pigeonA++) {
+			for (unsigned pigeonB = 0; pigeonB < pigeonA; pigeonB++) {
 				solver->addClause({
 					-var->pigeonInHole(pigeonA, hole),
 					-var->pigeonInHole(pigeonB, hole)
@@ -644,10 +664,14 @@ protected:
 
 typedef ContainerCombinator<HelperVariableContainer, BasicVariableContainer> hvc;
 
-class SimpleIncrementalPHPEncoder: public virtual UniversalPHPEncoder {
-	SimpleIncrementalPHPEncoder(unsigned numPigeons):
+class SimpleIncrementalPHPEncoder: public UniversalPHPEncoder {
+public:
+	SimpleIncrementalPHPEncoder(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		unsigned numPigeons):
+
 		UniversalPHPEncoder(
-				std::make_unique<ipasir::Solver>(),
+				std::move(_solver),
 				std::make_unique<hvc>(numPigeons),
 				numPigeons
 			)
@@ -661,10 +685,13 @@ class SimpleIncrementalPHPEncoder: public virtual UniversalPHPEncoder {
 			addAtMostOnePigeonInHole(numHoles - 1);
 			addAtLeastOneHolePerPigeon(numHoles, hvar->helper(numHoles - 1));
 
+			solver->assume(-hvar->helper(numHoles - 1));
 			solved = (solver->solve() == ipasir::SolveResult::SAT);
 			assert(!solved);
 		}
 	}
+
+	virtual ~SimpleIncrementalPHPEncoder(){}
 
 private:
 	hvc* hvar;
@@ -672,11 +699,13 @@ private:
 
 typedef ContainerCombinator<VariableContainer3SAT, BasicVariableContainer> svc;
 
-class PHPEncoder3SAT: public virtual UniversalPHPEncoder {
+class PHPEncoder3SAT: public UniversalPHPEncoder {
 public:
-	PHPEncoder3SAT(unsigned _numPigeons):
+	PHPEncoder3SAT(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		unsigned _numPigeons):
 		UniversalPHPEncoder(
-			std::make_unique<ipasir::Solver>(),
+			std::move(_solver),
 			std::make_unique<svc>(_numPigeons),
 			_numPigeons
 		) {
@@ -711,7 +740,6 @@ public:
 		VariableContainer3SAT* var =
 			dynamic_cast<VariableContainer3SAT*>(getVar());
 
-		addAtMostOnePigeonInHole(hole);
 		for (unsigned p = 0; p < numPigeons; p++) {
 			solver->addClause({
 				-var->connector(p,hole),
@@ -719,6 +747,8 @@ public:
 				 var->connector(p, hole + 1)
 			});
 		}
+
+		addAtMostOnePigeonInHole(hole);
 	}
 
 	virtual void assumeAll(unsigned i) {
@@ -726,7 +756,7 @@ public:
 			dynamic_cast<VariableContainer3SAT*>(getVar());
 
 		for (unsigned p = 0; p < numPigeons; p++) {
-			solver->assume(var->connector(p, i));
+			solver->assume(-var->connector(p, i));
 		}
 	}
 
@@ -734,14 +764,18 @@ public:
 		solve(false);
 	}
 
+	virtual void solveIncremental() {
+		solve(true);
+	}
+
 	virtual void solve(bool incremental){
 		bool solved;
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
-			assumeAll(numHoles);
 
 			if (incremental) {
+				assumeAll(numHoles);
 				solved = (solver->solve() == ipasir::SolveResult::SAT);
 				assert(!solved);
 			}
@@ -754,6 +788,131 @@ public:
 	}
 
 	virtual ~PHPEncoder3SAT() {};
+};
+
+typedef ContainerCombinator<ExtendedVariableContainer, VariableContainer3SAT> evc;
+
+class ExtendedPHPEncoder3SAT: public PHPEncoder3SAT {
+public:
+	ExtendedPHPEncoder3SAT(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		unsigned _numPigeons):
+
+		PHPEncoder3SAT(
+			std::move(_solver),
+			std::make_unique<evc>(_numPigeons),
+			_numPigeons
+		)
+	{
+	}
+
+	ExtendedPHPEncoder3SAT(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		std::unique_ptr<evc> _var,
+		unsigned _numPigeons):
+
+		PHPEncoder3SAT(
+			std::move(_solver),
+			std::move(_var),
+			_numPigeons
+			)
+	{
+	}
+
+	virtual void addExtendedResolutionClauses(){
+		ExtendedVariableContainer* var =
+			dynamic_cast<ExtendedVariableContainer*>(getVar());
+
+		for (unsigned n = numPigeons; n > 2; n--) {
+			for (unsigned i = 0; i < n - 1; i++) {
+				for (unsigned j = 0; j < n - 2; j++) {
+					solver->addClause({
+						 var->pigeonInHole(n - 1, i, j),
+						-var->pigeonInHole(n, i, j)
+					});
+					solver->addClause({
+						 var->pigeonInHole(n - 1, i, j),
+						-var->pigeonInHole(n, i, n - 2),
+						-var->pigeonInHole(n, n - 1, j)
+					});
+					solver->addClause({
+						-var->pigeonInHole(n - 1, i, j),
+						 var->pigeonInHole(n, i, j),
+						 var->pigeonInHole(n, i, n - 2)
+					});
+					solver->addClause({
+						-var->pigeonInHole(n - 1, i, j),
+						 var->pigeonInHole(n, i, j),
+						 var->pigeonInHole(n, n - 1, j)
+					});
+				}
+			}
+		}
+	}
+
+	virtual void learnClauses(unsigned step){
+		unsigned sn = numPigeons;
+		ExtendedVariableContainer* var =
+			dynamic_cast<ExtendedVariableContainer*>(getVar());
+
+
+			// learn at most one
+			for (unsigned h = 0; h < numPigeons - 1 - step; h++) {
+				for (unsigned p = 1; p < numPigeons - step; p++) {
+					for (unsigned j = 0; j < p; j++) {
+					//carj::ScopedTimer timer((*solves.rbegin())["time"]);
+					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << p << ", " << h << ")";
+					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << j << ", " << h << ")";
+					solver->assume(var->pigeonInHole(sn - step, p, h));
+					solver->assume(var->pigeonInHole(sn - step, j, h));
+					bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+					assert(!solved);
+					}
+				}
+			}
+
+			// learn at least one
+			for (unsigned p = 1; p < numPigeons - step; p++) {
+				for (unsigned h = 0; h < numPigeons - 1 - step; h++) {
+					//carj::ScopedTimer timer((*solves.rbegin())["time"]);
+					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << p << ", " << h << ")";
+					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << j << ", " << h << ")";
+					solver->assume(-var->pigeonInHole(sn - step, p, h));
+				}
+				bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+				assert(!solved);
+			}
+	}
+
+	virtual void solve() {
+		solve(false);
+	}
+
+	virtual void solveIncremental() {
+		solve(true);
+	}
+
+	virtual void solve(bool incremental){
+		bool solved;
+		addBorders();
+		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
+			addHole(numHoles - 1);
+		}
+		addExtendedResolutionClauses();
+
+		if (incremental) {
+			for (unsigned step = 0; step < numPigeons; step++) {
+				learnClauses(step);
+			}
+		}
+
+		solved = (solver->solve() == ipasir::SolveResult::SAT);
+		assert(!solved);
+	}
+
+	virtual ~ExtendedPHPEncoder3SAT(){
+
+	}
 };
 
 
@@ -912,24 +1071,75 @@ private:
 	}
 };
 
+carj::TCarjArg<TCLAP::ValueArg, unsigned> numberOfPigeons("n", "numPigeons",
+	"Number of pigeons", !neccessaryArgument, 1, "natural number", cmd);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> dimspec("d", "dimspec", "Output dimspec.",
+	cmd, defaultIsFalse);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> print("p", "print", "Output as cnf.",
+	cmd, defaultIsFalse);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> extendedResolution("e", "extendedResolution",
+	"Add extended resolution formulas.", cmd, defaultIsFalse);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> incremental("i", "incremental",
+	"Solve formual incrementally.", cmd, defaultIsFalse);
+
+carj::CarjArg<TCLAP::SwitchArg, bool> encoding3SAT("3", "3sat",
+	"Encode PHP in 3 SAT CNF.", cmd, defaultIsFalse);
+
 int incphp_main(int argc, const char **argv) {
 	carj::init(argc, argv, cmd, "/incphp/parameters");
 
 	if (dimspec.getValue()) {
 		DimSpecFixedPigeons dsfp(numberOfPigeons.getValue());
 		dsfp.print();
-	} else if (extendedResolution.getValue()) {
-		ExtendedResolution er(numberOfPigeons.getValue());
-		er.solve();
-	} else if (extendedResolution3.getValue()) {
-		ExtendedResolution3 er(numberOfPigeons.getValue());
-		er.solve();
-	} else if (incrementalExtendedResolution3.getValue()) {
-		IncrementalExtendedResolution3 er(numberOfPigeons.getValue());
-		er.solve();
 	} else {
-		IncrementalFixedPigeons ifp(numberOfPigeons.getValue());
-		ifp.solve();
+		std::unique_ptr<ipasir::Ipasir> solver;
+		if (print.getValue()) {
+			solver = std::make_unique<ipasir::Printer>();
+		} else {
+			solver = std::make_unique<ipasir::Solver>();
+		}
+
+		if (encoding3SAT.getValue()) {
+			if (extendedResolution.getValue()) {
+				ExtendedPHPEncoder3SAT encoder(
+					std::move(solver),
+					numberOfPigeons.getValue());
+				if (incremental.getValue()) {
+					encoder.solveIncremental();
+				} else {
+					encoder.solve();
+				}
+			} else {
+				PHPEncoder3SAT encoder(
+					std::move(solver),
+					numberOfPigeons.getValue());
+				if (incremental.getValue()) {
+					encoder.solveIncremental();
+				} else {
+					encoder.solve();
+				}
+			}
+		} else {
+			if (extendedResolution.getValue()) {
+				LOG(FATAL) << "Unsupported Option";
+			}
+
+			if (incremental.getValue()) {
+				SimpleIncrementalPHPEncoder encoder(
+					std::move(solver),
+					numberOfPigeons.getValue());
+				encoder.solve();
+			} else {
+				UniversalPHPEncoder encoder(
+					std::move(solver),
+					numberOfPigeons.getValue());
+				encoder.solve();
+			}
+		}
 	}
 
 	return 0;

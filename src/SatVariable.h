@@ -35,7 +35,7 @@ private:
 
     SatVariable(unsigned _start, std::vector<unsigned> _dimensions):
         dimensions(_dimensions), start(_start) {
-
+            assert(start > 0);
     }
 
     unsigned numberOfVariables() {
