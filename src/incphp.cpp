@@ -680,14 +680,27 @@ public:
 		}
 
 	virtual void solve(){
+		auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
+
 		bool solved;
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addAtMostOnePigeonInHole(numHoles - 1);
 			addAtLeastOneHolePerPigeon(numHoles, hvar->helper(numHoles - 1));
 
-			solver->assume(-hvar->helper(numHoles - 1));
-			solved = (solver->solve() == ipasir::SolveResult::SAT);
-			assert(!solved);
+			solves.push_back({
+				{"makespan", numHoles},
+				{"time", -1}
+			});
+			LOG(INFO) << "numHoles: " << numHoles;
+
+			{
+				carj::ScopedTimer timer((*solves.rbegin())["time"]);
+				solver->assume(-hvar->helper(numHoles - 1));
+				solved = (solver->solve() == ipasir::SolveResult::SAT);
+				assert(!solved);
+			}
+
 		}
 	}
 
@@ -758,6 +771,9 @@ public:
 		for (unsigned p = 0; p < numPigeons; p++) {
 			solver->assume(-var->connector(p, i));
 		}
+
+		bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+		assert(!solved);
 	}
 
 	virtual void solve() {
@@ -769,15 +785,23 @@ public:
 	}
 
 	virtual void solve(bool incremental){
+		auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
+		solves.clear();
+
 		bool solved;
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
 
 			if (incremental) {
+				solves.push_back({
+					{"makespan", numHoles},
+					{"time", -1}
+				});
+				LOG(INFO) << "numHoles: " << numHoles;
+				carj::ScopedTimer timer((*solves.rbegin())["time"]);
 				assumeAll(numHoles);
-				solved = (solver->solve() == ipasir::SolveResult::SAT);
-				assert(!solved);
 			}
 		}
 
@@ -788,6 +812,54 @@ public:
 	}
 
 	virtual ~PHPEncoder3SAT() {};
+};
+
+class AlternatePHPEncoder3SAT: public PHPEncoder3SAT {
+public:
+	AlternatePHPEncoder3SAT(
+		std::unique_ptr<ipasir::Ipasir> _solver,
+		unsigned _numPigeons):
+		PHPEncoder3SAT(
+			std::move(_solver),
+			std::make_unique<svc>(_numPigeons),
+			_numPigeons
+		) {
+
+	}
+
+	virtual void assumeAll(unsigned numHoles) {
+		VariableContainer3SAT* var =
+			dynamic_cast<VariableContainer3SAT*>(getVar());
+
+		unsigned n = numPigeons;
+		for (unsigned k = numPigeons; k >=numHoles + 1; k--) {
+			// std::cout << "n: " << n << " k: " << k << std::endl;
+
+			std::vector<bool> v(n);
+			std::fill(v.begin(), v.begin() + k, true);
+
+			do {
+				for (unsigned i = 0; i < n; ++i) {
+					if (v[i]) {
+						solver->assume(-var->connector(i, numHoles));
+						// std::cout << i << " ";
+					}
+				}
+				// std::cout << std::endl;
+				bool unsat = (solver->solve() == ipasir::SolveResult::UNSAT);
+				if (unsat) {
+					for (unsigned i = 0; i < n; ++i) {
+						if (v[i]) {
+							solver->add(var->connector(i, numHoles));
+							// std::cout << i << " ";
+						}
+					}
+					solver->add(0);
+				}
+				assert(unsat);
+			} while (std::prev_permutation(v.begin(), v.end()));
+		}
+	}
 };
 
 typedef ContainerCombinator<ExtendedVariableContainer, VariableContainer3SAT> evc;
@@ -1086,6 +1158,9 @@ carj::CarjArg<TCLAP::SwitchArg, bool> extendedResolution("e", "extendedResolutio
 carj::CarjArg<TCLAP::SwitchArg, bool> incremental("i", "incremental",
 	"Solve formual incrementally.", cmd, defaultIsFalse);
 
+carj::CarjArg<TCLAP::SwitchArg, bool> alternate("a", "alternate",
+	"alternate mode", cmd, defaultIsFalse);
+
 carj::CarjArg<TCLAP::SwitchArg, bool> encoding3SAT("3", "3sat",
 	"Encode PHP in 3 SAT CNF.", cmd, defaultIsFalse);
 
@@ -1105,22 +1180,31 @@ int incphp_main(int argc, const char **argv) {
 
 		if (encoding3SAT.getValue()) {
 			if (extendedResolution.getValue()) {
-				ExtendedPHPEncoder3SAT encoder(
-					std::move(solver),
-					numberOfPigeons.getValue());
+				std::unique_ptr<ExtendedPHPEncoder3SAT> encoder =
+					std::make_unique<ExtendedPHPEncoder3SAT>(
+							std::move(solver),
+							numberOfPigeons.getValue());
 				if (incremental.getValue()) {
-					encoder.solveIncremental();
+					encoder->solveIncremental();
 				} else {
-					encoder.solve();
+					encoder->solve();
 				}
 			} else {
-				PHPEncoder3SAT encoder(
-					std::move(solver),
-					numberOfPigeons.getValue());
-				if (incremental.getValue()) {
-					encoder.solveIncremental();
+				std::unique_ptr<PHPEncoder3SAT> encoder;
+				if (alternate.getValue()) {
+					encoder = std::make_unique<AlternatePHPEncoder3SAT>(
+						std::move(solver),
+						numberOfPigeons.getValue());
 				} else {
-					encoder.solve();
+					encoder = std::make_unique<PHPEncoder3SAT>(
+							std::move(solver),
+							numberOfPigeons.getValue());
+				}
+
+				if (incremental.getValue()) {
+					encoder->solveIncremental();
+				} else {
+					encoder->solve();
 				}
 			}
 		} else {
