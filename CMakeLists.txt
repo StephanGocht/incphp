@@ -77,9 +77,9 @@ ENDFOREACH()
 
 # Dummy target which builds all targets but only for one solver
 add_custom_target(core DEPENDS unitTest runTest)
-if (TARGET incphp-cominisatps2sun_nopre)
-	add_dependencies(core incphp-cominisatps2sun_nopre)
+if (TARGET incphp-gmod)
+	add_dependencies(core incphp-gmod)
 
 	# Make sure the tool is build, even if tests fail.
-	add_dependencies(runTest incphp-cominisatps2sun_nopre)
+	add_dependencies(runTest incphp-gmod)
 endif()

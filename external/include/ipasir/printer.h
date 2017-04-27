@@ -49,6 +49,10 @@ namespace ipasir {
 
         }
 
+        virtual void set_learn (int max_length, std::function<void(int*)>) {
+
+        }
+
         virtual void reset() {
             assumptions.clear();
         }
