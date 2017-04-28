@@ -37,19 +37,19 @@ namespace ipasir {
             return SolveResult::UNSAT;
         }
 
-        virtual int val(int lit) {
+        virtual int val(int) {
             return 0;
         }
 
-        virtual int failed (int lit) {
+        virtual int failed (int) {
             return 0;
         }
 
-        virtual void set_terminate (std::function<int(void)> callback) {
+        virtual void set_terminate (std::function<int(void)>) {
 
         }
 
-        virtual void set_learn (int max_length, std::function<void(int*)>) {
+        virtual void set_learn (int, std::function<void(int*)>) {
 
         }
 
