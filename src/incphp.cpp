@@ -3,12 +3,15 @@
 #include <array>
 #include <iostream>
 #include <cmath>
+#include <set>
 
 #include "SatVariable.h"
+#include "LearnedClauseEvaluationDecorator.h"
 
 #include "tclap/CmdLine.h"
 #include "carj/carj.h"
 #include "carj/ScopedTimer.h"
+#include "ipasir/randomized_ipasir.h"
 #include "ipasir/ipasir_cpp.h"
 #include "ipasir/printer.h"
 
@@ -114,80 +117,6 @@ public:
 			// });
 		}
 	}
-};
-
-class IncrementalFixedPigeons {
-public:
-	IncrementalFixedPigeons(unsigned _numPigeons):
-		numPigeons(_numPigeons),
-		numLiteralsPerTime(_numPigeons + 1)
-	{
-
-	}
-
-	void solve(){
-		auto& solves = carj::getCarj()
-			.data["/incphp/result/solves"_json_pointer];
-		solves.clear();
-
-		bool solved = false;
-		for (unsigned makespan = 0; !solved; makespan++) {
-			// at most one pigeon in hole of step
-			for (unsigned i = 0; i < numPigeons; i++) {
-				for (unsigned j = 0; j < i; j++) {
-					addClause({
-						-varPigeonInHole(i, makespan),
-						-varPigeonInHole(j, makespan)});
-				}
-			}
-
-			if (makespan >= startingMakeSpan.getValue()) {
-				// each pigeon has at least one hole
-				for (unsigned p = 0; p < numPigeons; p++) {
-					std::vector<int> clause;
-					for (unsigned h = 0; h <= makespan; h++) {
-						clause.push_back(varPigeonInHole(p, h));
-					}
-					clause.push_back(-activationLiteral(makespan));
-					addClause(clause);
-				}
-
-				solves.push_back({
-					{"makespan", makespan},
-					{"time", -1}
-				});
-				{
-					carj::ScopedTimer timer((*solves.rbegin())["time"]);
-					solver.assume(activationLiteral(makespan));
-					solved = (solver.solve() == ipasir::SolveResult::SAT);
-				}
-			}
-		}
-	}
-
-private:
-	/**
-	 * Variable representing that pigeon p is in hole h.
-	 * Note that hole is the same as makespan.
-	 */
-	int varPigeonInHole(unsigned p, unsigned h) {
-		return numLiteralsPerTime * h + p + 2;
-	}
-
-	int activationLiteral(unsigned t) {
-		return numLiteralsPerTime * t + 1;
-	}
-
-	void addClause(std::vector<int> clause) {
-		for (int literal: clause) {
-			solver.add(literal);
-		}
-		solver.add(0);
-	}
-
-	unsigned numPigeons;
-	unsigned numLiteralsPerTime;
-	ipasir::Solver solver;
 };
 
 class VariableContainer {
@@ -665,10 +594,35 @@ public:
 					//carj::ScopedTimer timer((*solves.rbegin())["time"]);
 					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << p << ", " << h << ")";
 					//LOG(INFO) << "var->pigeonInHole(" << sn - step << ", " << j << ", " << h << ")";
-					solver->assume(var->pigeonInHole(sn - step, p, h));
-					solver->assume(var->pigeonInHole(sn - step, j, h));
+
+					std::vector<int> clause({
+						-var->pigeonInHole(sn - step, p, h),
+						-var->pigeonInHole(sn - step, j, h)
+					});
+
+					for (int lit: clause) {
+						solver->assume(-lit);
+					}
+
+					std::set<int> clauseLiterals;
+					clauseLiterals.insert(clause.begin(),clause.end());
+
+					bool foundClause = false;
+					solver->set_learn(2, [&foundClause, &clauseLiterals](int* learned) {
+						std::set<int> learnedLiterals;
+						while(*learned != 0) {
+							learnedLiterals.insert(*learned);
+							learned++;
+						}
+
+						foundClause |= (learnedLiterals == clauseLiterals);
+					});
+
 					bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+					std::cout << "b" << foundClause << std::endl;
 					assert(!solved);
+
+					solver->set_learn(0, [](int*){});
 					}
 				}
 			}
@@ -695,6 +649,13 @@ public:
 	}
 
 	virtual void solve(bool incremental){
+		// solver->set_learn(10000, [](int* learned) {
+		// 	for(;*learned != 0;learned++) {
+		// 		std::cout << *learned << " ";
+		// 	}
+		// 	std::cout << std::endl;
+		// });
+
 		bool solved;
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
@@ -703,7 +664,17 @@ public:
 		addExtendedResolutionClauses();
 
 		if (incremental) {
-			for (unsigned step = 0; step < numPigeons; step++) {
+			auto& solves = carj::getCarj()
+				.data["/incphp/result/solves"_json_pointer];
+			solves.clear();
+			for (unsigned step = 1; step < numPigeons; step++) {
+				solves.push_back({
+					{"makespan", step},
+					{"time", -1}
+				});
+				LOG(INFO) << "step: " << step;
+
+				carj::ScopedTimer timer((*solves.rbegin())["time"]);
 				learnClauses(step);
 			}
 		}
@@ -752,6 +723,8 @@ int incphp_main(int argc, const char **argv) {
 		} else {
 			solver = std::make_unique<ipasir::Solver>();
 		}
+		solver = std::make_unique<ipasir::RandomizedSolver>(std::move(solver));
+		solver = std::make_unique<LearnedClauseEvaluationDecorator>(std::move(solver));
 
 		if (encoding3SAT.getValue()) {
 			if (extendedResolution.getValue()) {
