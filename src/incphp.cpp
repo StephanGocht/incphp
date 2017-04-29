@@ -26,9 +26,25 @@ TCLAP::CmdLine cmd(
 	"This tool solves the pidgeon hole principle incrementally.",
 	' ', "0.1");
 
-carj::TCarjArg<TCLAP::ValueArg, unsigned> startingMakeSpan("s", "startingMakeSpan",
-	"Makespan to start with.", !neccessaryArgument, 0, "natural number", cmd);
+carj::CarjArg<TCLAP::SwitchArg, bool> addAssumed("A", "addAssumed",
+	"Add assumed clauses.", cmd, defaultIsFalse);
 
+namespace CollectData {
+class MakespanAndTime {
+public:
+	MakespanAndTime(unsigned makespan) {
+		static auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
+		solves.push_back({});
+		solves.back()["makespan"] = makespan;
+		LOG(INFO) << "makespan: " << makespan;
+
+		timer = std::make_unique<carj::ScopedTimer>(solves.back()["time"]);
+	}
+private:
+	std::unique_ptr<carj::ScopedTimer> timer;
+};
+}
 
 class DimSpecFixedPigeons {
 private:
@@ -339,22 +355,13 @@ public:
 		}
 
 	virtual void solve(){
-		auto& solves = carj::getCarj()
-			.data["/incphp/result/solves"_json_pointer];
-
 		bool solved;
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addAtMostOnePigeonInHole(numHoles - 1);
 			addAtLeastOneHolePerPigeon(numHoles, hvar->helper(numHoles - 1));
 
-			solves.push_back({
-				{"makespan", numHoles},
-				{"time", -1}
-			});
-			LOG(INFO) << "numHoles: " << numHoles;
-
 			{
-				carj::ScopedTimer timer((*solves.rbegin())["time"]);
+				CollectData::MakespanAndTime m(numHoles);
 				solver->assume(-hvar->helper(numHoles - 1));
 				solved = (solver->solve() == ipasir::SolveResult::SAT);
 				assert(!solved);
@@ -444,22 +451,13 @@ public:
 	}
 
 	virtual void solve(bool incremental){
-		auto& solves = carj::getCarj()
-			.data["/incphp/result/solves"_json_pointer];
-		solves.clear();
-
 		bool solved;
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
 
 			if (incremental) {
-				solves.push_back({
-					{"makespan", numHoles},
-					{"time", -1}
-				});
-				LOG(INFO) << "numHoles: " << numHoles;
-				carj::ScopedTimer timer((*solves.rbegin())["time"]);
+				CollectData::MakespanAndTime m(numHoles);
 				assumeAll(numHoles);
 			}
 		}
@@ -506,7 +504,9 @@ public:
 				}
 				// std::cout << std::endl;
 				bool unsat = (solver->solve() == ipasir::SolveResult::UNSAT);
-				if (unsat) {
+				assert(unsat);
+
+				if (unsat && addAssumed.getValue()) {
 					for (unsigned i = 0; i < n; ++i) {
 						if (v[i]) {
 							solver->add(var->connector(i, numHoles));
@@ -515,7 +515,6 @@ public:
 					}
 					solver->add(0);
 				}
-				assert(unsat);
 			} while (std::prev_permutation(v.begin(), v.end()));
 		}
 	}
@@ -619,7 +618,6 @@ public:
 					});
 
 					bool solved = (solver->solve() == ipasir::SolveResult::SAT);
-					std::cout << "b" << foundClause << std::endl;
 					assert(!solved);
 
 					solver->set_learn(0, [](int*){});
@@ -664,17 +662,8 @@ public:
 		addExtendedResolutionClauses();
 
 		if (incremental) {
-			auto& solves = carj::getCarj()
-				.data["/incphp/result/solves"_json_pointer];
-			solves.clear();
 			for (unsigned step = 1; step < numPigeons; step++) {
-				solves.push_back({
-					{"makespan", step},
-					{"time", -1}
-				});
-				LOG(INFO) << "step: " << step;
-
-				carj::ScopedTimer timer((*solves.rbegin())["time"]);
+				CollectData::MakespanAndTime m(step);
 				learnClauses(step);
 			}
 		}
@@ -710,6 +699,9 @@ carj::CarjArg<TCLAP::SwitchArg, bool> alternate("a", "alternate",
 carj::CarjArg<TCLAP::SwitchArg, bool> encoding3SAT("3", "3sat",
 	"Encode PHP in 3 SAT CNF.", cmd, defaultIsFalse);
 
+carj::CarjArg<TCLAP::SwitchArg, bool> record("r", "record",
+	"Record clause learning data.", cmd, defaultIsFalse);
+
 int incphp_main(int argc, const char **argv) {
 	carj::init(argc, argv, cmd, "/incphp/parameters");
 
@@ -724,7 +716,9 @@ int incphp_main(int argc, const char **argv) {
 			solver = std::make_unique<ipasir::Solver>();
 		}
 		solver = std::make_unique<ipasir::RandomizedSolver>(std::move(solver));
-		solver = std::make_unique<LearnedClauseEvaluationDecorator>(std::move(solver));
+		if (record.getValue()) {
+			solver = std::make_unique<LearnedClauseEvaluationDecorator>(std::move(solver));
+		}
 
 		if (encoding3SAT.getValue()) {
 			if (extendedResolution.getValue()) {

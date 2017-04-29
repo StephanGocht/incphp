@@ -71,6 +71,7 @@ public:
 		}
 
 		this->assumedClause.clear();
+		this->updateLoggedData();
 		return result;
 	}
 
@@ -92,6 +93,7 @@ public:
 		foundAssumed = 0;
 		numSolvesWithAssumption = 0;
 		numSolvesWithAssumptionFound = 0;
+		numSolvesWithSubsetAssumptionFound = 0;
 
 		solver->set_learn(
 			10000,
@@ -143,4 +145,25 @@ private:
 	unsigned numSolvesWithAssumption;
 	unsigned numSolvesWithAssumptionFound;
 	unsigned numSolvesWithSubsetAssumptionFound;
+
+	void updateLoggedData(){
+		static auto& solves = carj::getCarj()
+			.data["/incphp/result/solves"_json_pointer];
+
+		if (solves.size() > 0) {
+			solves.back()["numLearnedClauses"] = numLearnedClauses;
+			solves.back()["numLearnedClausesWithAssumedLiteral"] = numLearnedClausesWithAssumedLiteral;
+			solves.back()["numSolvesWithAssumption"] = numSolvesWithAssumption;
+			solves.back()["numSolvesWithAssumptionFound"] = numSolvesWithAssumptionFound;
+			solves.back()["numSolvesWithSubsetAssumptionFound"] = numSolvesWithSubsetAssumptionFound;
+		}
+
+		static auto& global = carj::getCarj()
+			.data["/incphp/result/learnedClauseEval"_json_pointer];
+		global["numLearnedClauses"] = numLearnedClauses;
+		global["numLearnedClausesWithAssumedLiteral"] = numLearnedClausesWithAssumedLiteral;
+		global["numSolvesWithAssumption"] = numSolvesWithAssumption;
+		global["numSolvesWithAssumptionFound"] = numSolvesWithAssumptionFound;
+		global["numSolvesWithSubsetAssumptionFound"] = numSolvesWithSubsetAssumptionFound;
+	}
 };
