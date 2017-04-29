@@ -1,0 +1,97 @@
+{
+    "tools":[
+        "experimentrun.tools.Eval('/BootstrapConfig')",
+        "experimentrun.tools.ExplodeNBootstrap('/BootstrapConfig')",
+        "experimentrun.tools.WriteConfigToFile('result.json')"
+    ],
+
+    "BootstrapConfig":{
+        "parallel": true,
+        "processors": {"%eval":"list(range(${/BootstrapConfig/numProcessors}))"},
+        "numProcessors": "2"
+    },
+
+    "configurations":[
+    {
+        "conf":{
+            "numPigeons": {"%explode": [2, 3, 4, 5, 6, 7, 8]},
+            "run": {"%explode": [0, 1]},
+            "setup":{
+                "solver": "gmod",
+                "incremental": {"%explode":[true, false]},
+                "record": {"%explode":[true, false]},
+                "variant": {"%explode":[
+                    {
+                        "3sat": false,
+                        "addAssumed": false,
+                        "alternate": false,
+                        "extendedResolution": false
+                    },
+                    {
+                        "3sat": true,
+                        "addAssumed": false,
+                        "alternate": false,
+                        "extendedResolution": false
+                    },
+                    {
+                        "3sat": true,
+                        "addAssumed": false,
+                        "alternate": false,
+                        "extendedResolution": true
+                    },
+                    {
+                        "3sat": true,
+                        "addAssumed": {"%explode":[true, false]},
+                        "alternate": true,
+                        "extendedResolution": false
+                    }
+                ]}
+            }
+        },
+
+        "tools":[
+            //"experimentrun.tools.RunShell('rm carj.json')",
+            "experimentrun.tools.ResolveLinks()",
+            "experimentrun.tools.Eval('/conf')",
+            "experimentrun.tools.MakeAndCdTempDir('run_')",
+            // "experimentrun.tools.PrintCurrentJson()",
+            {"%link": "/incphp/run"}
+            // {"%link": "/conf/setup/variant/optionalRun"}
+            //"experimentrun.tools.WriteJson()",
+            //"experimentrun.tools.PrintCurrentJson()"
+        ],
+        "%limits": {
+            // limit to processor time in seconds [softlimit,hardlimit]
+            "RLIMIT_CPU":[900,950],
+            // Memory limit in byte
+            "RLIMIT_VMEM":[8589934592,8589934592]
+            // limit to wall clock time
+            // "timeout": 40
+        },
+        "incphp":{
+            "run": {
+                "name":"experimentrun.tools.RunShell",
+                "parameters": {
+                    "command":"${/incphp/parameters/binDir}/incphp-${/incphp/parameters/solver} --useConfig &> outputIncPhp",
+                    "runInfoTo":"/incphp/result/executionTime",
+                    "externalUsedConfig":"carj.json"
+                }
+            },
+            "parameters": {
+                "binDir": "~/ma/tools/incphp/bin",
+                "solver": "${/conf/setup/solver}",
+
+                "3sat": {"%link": "/conf/setup/variant/3sat"},
+                "addAssumed": {"%link": "/conf/setup/variant/addAssumed"},
+                "alternate": {"%link": "/conf/setup/variant/alternate"},
+                "dimspec": false,
+                "extendedResolution": {"%link": "/conf/setup/variant/extendedResolution"},
+                "incremental": {"%link": "/conf/setup/incremental"},
+                "numPigeons": {"%link": "/conf/numPigeons"},
+                "print": false,
+                "record": {"%link": "/conf/setup/record"}
+            }
+        }
+    }
+    ]
+}
