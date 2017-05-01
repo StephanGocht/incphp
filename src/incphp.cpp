@@ -28,6 +28,8 @@ TCLAP::CmdLine cmd(
 
 carj::CarjArg<TCLAP::SwitchArg, bool> addAssumed("A", "addAssumed",
 	"Add assumed clauses.", cmd, defaultIsFalse);
+carj::CarjArg<TCLAP::SwitchArg, bool> fixedUpperBound("u", "fixedUpperBound",
+	"Add upper bound as clauses.", cmd, defaultIsFalse);
 
 namespace CollectData {
 class MakespanAndTime {
@@ -405,13 +407,19 @@ public:
 
 		}
 
-	virtual void addBorders() {
+	virtual void addLowerBorder() {
 		VariableContainer3SAT* var =
 			dynamic_cast<VariableContainer3SAT*>(getVar());
 
 		for (unsigned p = 0; p < numPigeons; p++) {
 			solver->addClause({ var->connector(p, 0)});
-			solver->addClause({-var->connector(p, numPigeons - 1)});
+		}
+	}
+
+	virtual void addBorders() {
+		addLowerBorder();
+		if (fixedUpperBound.getValue()) {
+			addUpperBorder();
 		}
 	}
 
@@ -430,6 +438,15 @@ public:
 		addAtMostOnePigeonInHole(hole);
 	}
 
+	virtual void addUpperBorder() {
+		VariableContainer3SAT* var =
+			dynamic_cast<VariableContainer3SAT*>(getVar());
+
+		for (unsigned p = 0; p < numPigeons; p++) {
+			solver->addClause({ -var->connector(p, numPigeons - 1)});
+		}
+	}
+
 	virtual void assumeAll(unsigned i) {
 		VariableContainer3SAT* var =
 			dynamic_cast<VariableContainer3SAT*>(getVar());
@@ -437,9 +454,6 @@ public:
 		for (unsigned p = 0; p < numPigeons; p++) {
 			solver->assume(-var->connector(p, i));
 		}
-
-		bool solved = (solver->solve() == ipasir::SolveResult::SAT);
-		assert(!solved);
 	}
 
 	virtual void solve() {
@@ -455,14 +469,19 @@ public:
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
-
 			if (incremental) {
 				CollectData::MakespanAndTime m(numHoles);
 				assumeAll(numHoles);
+				bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+				assert(!solved);
 			}
 		}
 
-		if (!incremental) {
+		if (!incremental)
+		{
+			unsigned numHoles = numPigeons - 1;
+			CollectData::MakespanAndTime m(numHoles);
+			assumeAll(numHoles);
 			solved = (solver->solve() == ipasir::SolveResult::SAT);
 			assert(!solved);
 		}
