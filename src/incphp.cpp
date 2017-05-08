@@ -738,6 +738,7 @@ int incphp_main(int argc, const char **argv) {
 		if (record.getValue()) {
 			solver = std::make_unique<LearnedClauseEvaluationDecorator>(std::move(solver));
 		}
+		LOG(INFO) << "Using solver: " << solver->signature();
 
 		if (encoding3SAT.getValue()) {
 			if (extendedResolution.getValue()) {

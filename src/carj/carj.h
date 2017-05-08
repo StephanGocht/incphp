@@ -24,14 +24,16 @@ namespace carj {
 
 	class Carj {
 	public:
-		const std::string configPath = "carj.json";
+		static const std::string configPath;
 
 		Carj() {
 		}
 
-		void init(bool loadFromDefault = false, std::string base = "") {
+		void init(std::string inputPath = configPath,
+				bool loadFromDefault = false,
+				std::string base = "") {
 			if (loadFromDefault) {
-				std::ifstream inStream(configPath);
+				std::ifstream inStream(inputPath);
 				if (inStream) {
 					inStream >> data;
 				}
