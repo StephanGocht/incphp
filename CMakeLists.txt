@@ -9,6 +9,8 @@ flags to the compiler.")
 set(IPASIR_DIR "${CMAKE_SOURCE_DIR}/external/lib/ipasir" CACHE STRING
 "The directory which contains one or more implemntations to the ipasir \
 interface. The libs should have the format 'libipasir[solver-name].a'")
+set(BUILD_TESTS "ON" CACHE STRING
+"Whether to build tests. Values: ON, OFF")
 
 # Basic Settings
 set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wpedantic -pthread -g ${USER_CXX_FLAGS}")
@@ -32,20 +34,24 @@ set(UNIT_TEST_FILES
 add_library(ipasir_wrapper external/include/ipasir/ipasir_cpp.cpp)
 add_library(all_sources ${SRC_FILES})
 
-# Include google test, our testing framework
-include(gtest)
+if (BUILD_TESTS EQUAL "ON")
+	# Include google test, our testing framework
+	include(gtest)
 
-# === Target: unitTest ===
-add_executable(unitTest ${UNIT_TEST_FILES})
-target_link_libraries(unitTest
-	all_sources
-	ipasir_wrapper
-	gtest_main
-	gmock_main
-)
-set_target_properties(unitTest PROPERTIES
-	COTIRE_PREFIX_HEADER_IGNORE_PATH "${CMAKE_SOURCE_DIR}"
-		_PREFIX_HEADER_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/libs")
+	# === Target: unitTest ===
+	add_executable(unitTest ${UNIT_TEST_FILES})
+	target_link_libraries(unitTest
+		all_sources
+		ipasir_wrapper
+		gtest_main
+		gmock_main
+	)
+	set_target_properties(unitTest PROPERTIES
+		COTIRE_PREFIX_HEADER_IGNORE_PATH "${CMAKE_SOURCE_DIR}"
+			_PREFIX_HEADER_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/libs")
+else()
+	add_custom_target(unitTest)
+endif()
 
 # === Target: runtest ===
 add_custom_target(runTest
@@ -59,9 +65,15 @@ add_custom_target(runTest
 
 # This folder should contain the library of solvers to link aigainst. Each
 # incremental solver library should be named libipasir[solver-name].a
-file(GLOB ipasir_libs RELATIVE ${IPASIR_DIR}
-	${IPASIR_DIR}/*.a
+get_filename_component(IPASIR_DIR_ABS ${IPASIR_DIR} ABSOLUTE)
+file(GLOB ipasir_libs RELATIVE ${IPASIR_DIR_ABS}
+	${IPASIR_DIR_ABS}/libipasir*.a
 	)
+
+message(STATUS "Found the following libs in ${IPASIR_DIR_ABS}: ${ipasir_libs}")
+FOREACH(ipasir_lib ${ipasir_libs})
+	message(STATUS "${ipasir_lib}")
+ENDFOREACH()
 
 FOREACH(ipasir_lib ${ipasir_libs})
 	string(REGEX REPLACE "libipasir(.*).a" "\\1" libname ${ipasir_lib})
@@ -69,7 +81,7 @@ FOREACH(ipasir_lib ${ipasir_libs})
 	target_link_libraries(incphp-${libname}
 		all_sources
 		ipasir_wrapper
-		${IPASIR_DIR}/${ipasir_lib}
+		${IPASIR_DIR_ABS}/${ipasir_lib}
 		)
 ENDFOREACH()
 
