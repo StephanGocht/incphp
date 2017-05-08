@@ -416,9 +416,9 @@ public:
 		}
 	}
 
-	virtual void addBorders() {
+	virtual void addBorders(bool forceUppberBound = false) {
 		addLowerBorder();
-		if (fixedUpperBound.getValue()) {
+		if (forceUppberBound || fixedUpperBound.getValue()) {
 			addUpperBorder();
 		}
 	}
@@ -674,7 +674,7 @@ public:
 		// });
 
 		bool solved;
-		addBorders();
+		addBorders(true);
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
 		}
