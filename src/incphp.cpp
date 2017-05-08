@@ -454,6 +454,9 @@ public:
 		for (unsigned p = 0; p < numPigeons; p++) {
 			solver->assume(-var->connector(p, i));
 		}
+
+		bool solved = (solver->solve() == ipasir::SolveResult::SAT);
+		assert(!solved);
 	}
 
 	virtual void solve() {
@@ -465,15 +468,12 @@ public:
 	}
 
 	virtual void solve(bool incremental){
-		bool solved;
 		addBorders();
 		for (unsigned numHoles = 1; numHoles < numPigeons; numHoles++) {
 			addHole(numHoles - 1);
 			if (incremental) {
 				CollectData::MakespanAndTime m(numHoles);
 				assumeAll(numHoles);
-				bool solved = (solver->solve() == ipasir::SolveResult::SAT);
-				assert(!solved);
 			}
 		}
 
@@ -482,8 +482,6 @@ public:
 			unsigned numHoles = numPigeons - 1;
 			CollectData::MakespanAndTime m(numHoles);
 			assumeAll(numHoles);
-			solved = (solver->solve() == ipasir::SolveResult::SAT);
-			assert(!solved);
 		}
 	}
 
